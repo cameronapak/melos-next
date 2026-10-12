@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+# Prepares a fresh Amp orb: installs mise, the pinned Bun, and locked dependencies.
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$repo_root"
+
+step() {
+  local label="$1"
+  shift
+  local start=$SECONDS
+  echo "==> $label"
+  "$@"
+  echo "<== $label ($((SECONDS - start))s)"
+}
+
+mise_bin="$HOME/.local/bin/mise"
+
+install_mise() {
+  if [[ -x "$mise_bin" ]]; then
+    "$mise_bin" --version
+    return
+  fi
+  curl -fsSL --silent --show-error https://mise.run | MISE_INSTALL_PATH="$mise_bin" MISE_QUIET=1 sh
+}
+
+# Activate mise in login shells so Amp and orb services get the pinned Bun and
+# node_modules/.bin from mise.toml, not the base image's Bun.
+persist_activation() {
+  local marker="# mise activation (Amp orb)"
+  if ! grep -Fqx "$marker" "$HOME/.bash_profile" 2>/dev/null; then
+    cat >>"$HOME/.bash_profile" <<PROFILE
+
+$marker
+if [ -x "$mise_bin" ]; then
+  eval "\$("$mise_bin" activate bash)"
+fi
+PROFILE
+  fi
+}
+
+step "Install mise" install_mise
+step "Trust mise.toml" "$mise_bin" trust --quiet "$repo_root/mise.toml"
+# Installs Bun from mise.toml. Its postinstall hook runs `bun install --frozen-lockfile`
+# on every run, so a stale snapshot is reconciled against bun.lock.
+step "Install tools and dependencies" "$mise_bin" install --yes
+step "Persist mise activation" persist_activation

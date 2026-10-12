@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# Runs on every orb activation and wake. Keep it fast and idempotent.
+set -euo pipefail
+
+# oxlint's JS-plugin allocator reserves a large fixed-size virtual memory block,
+# which heuristic overcommit refuses on small swapless orbs (`mise run lint`
+# panics in oxc_allocator). Kernel settings are not kept in snapshots.
+if [[ "$(cat /proc/sys/vm/overcommit_memory)" != 1 ]]; then
+  sudo -n sysctl -q -w vm.overcommit_memory=1
+fi
